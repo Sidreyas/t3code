@@ -1286,6 +1286,64 @@ describe("AcpSessionRuntime", () => {
     ),
   );
 
+  it.live("waits for a session/load response that replay idle outran before prompting", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      const started = yield* runtime.start();
+      expect(started.sessionSetupResult._meta).toMatchObject({ t3SessionLoadReady: "replay_idle" });
+
+      const response = yield* runtime.prompt({ prompt: [{ type: "text", text: "hi" }] });
+      expect(response.stopReason).toBe("end_turn");
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          ...mockRuntimeOptions,
+          spawn: {
+            ...mockRuntimeOptions.spawn,
+            env: {
+              T3_ACP_EMIT_LOAD_REPLAY: "1",
+              T3_ACP_LOAD_SESSION_RESPONSE_DELAY_MS: "1000",
+              T3_ACP_REJECT_PROMPT_BEFORE_LOAD: "1",
+            },
+          },
+          resumeSessionId: "mock-session-1",
+          sessionLoadReplayIdleGap: 50,
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    ),
+  );
+
+  // regression: #3156 an agent that never answers session/load still takes prompts
+  it.live("prompts after a bounded wait when session/load never answers", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      yield* runtime.start();
+
+      const response = yield* runtime.prompt({ prompt: [{ type: "text", text: "hi" }] });
+      expect(response.stopReason).toBe("end_turn");
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          ...mockRuntimeOptions,
+          spawn: {
+            ...mockRuntimeOptions.spawn,
+            env: {
+              T3_ACP_EMIT_LOAD_REPLAY: "1",
+              T3_ACP_LOAD_SESSION_RESPONSE_DELAY_MS: "600000",
+            },
+          },
+          resumeSessionId: "mock-session-1",
+          sessionLoadReplayIdleGap: 50,
+          sessionLoadPromptWait: 100,
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    ),
+  );
+
   it.effect("rejects invalid config option values before sending session/set_config_option", () => {
     const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acp-runtime-"));
     const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
