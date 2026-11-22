@@ -1004,6 +1004,24 @@ it.layer(
       }),
     );
 
+    it.effect("names the binary path when it does not speak the app-server protocol", () =>
+      Effect.gen(function* () {
+        const binaryPath = "/opt/t3-missing/not-codex";
+
+        const status = yield* checkCodexProviderStatus(decodeCodexSettings({ binaryPath }), () =>
+          Effect.fail(
+            new CodexErrors.CodexAppServerProtocolParseError({ operation: "decode-wire-message" }),
+          ),
+        );
+
+        assert.strictEqual(status.status, "error");
+        assert.strictEqual(
+          status.message,
+          `\`${binaryPath} app-server\` did not answer with the Codex app-server protocol. Check that Settings → Providers → Codex → Binary path on the server points to the Codex CLI.`,
+        );
+      }),
+    );
+
     it.effect("does not run --version when the Codex executable cannot start", () =>
       Effect.gen(function* () {
         if ((yield* HostProcess.Platform) === "win32") return;

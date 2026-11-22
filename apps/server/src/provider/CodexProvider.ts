@@ -60,6 +60,7 @@ import {
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import packageJson from "../../package.json" with { type: "json" };
 const isCodexAppServerSpawnError = Schema.is(CodexErrors.CodexAppServerSpawnError);
+const isCodexAppServerProtocolParseError = Schema.is(CodexErrors.CodexAppServerProtocolParseError);
 
 type CodexRateLimitsProbe =
   | {
@@ -1095,7 +1096,10 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         status: "error",
         auth: { status: "unknown" },
         message: installed
-          ? `Codex app-server provider probe failed: ${error.message}.`
+          ? // A non-JSON line on stdout means the binary is not speaking the app-server protocol.
+            isCodexAppServerProtocolParseError(error) && error.operation === "decode-wire-message"
+            ? `\`${codexSettings.binaryPath} app-server\` did not answer with the Codex app-server protocol. Check that Settings → Providers → Codex → Binary path on the server points to the Codex CLI.`
+            : `Codex app-server provider probe failed: ${error.message}.`
           : `Could not start Codex CLI (\`${codexSettings.binaryPath}\`). Check Settings → Providers → Codex → Binary path on the server.` +
             (codexSettings.binaryPath === "codex"
               ? " Installing ChatGPT or Codex desktop may not add codex to PATH."
